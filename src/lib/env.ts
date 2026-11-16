@@ -6,8 +6,7 @@ const serverSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
   CRON_SECRET: z.string().min(1, "CRON_SECRET is required"),
-  ADZUNA_APP_ID: z.string().optional(),
-  ADZUNA_APP_KEY: z.string().optional(),
+  REMOTIVE_API_URL: z.string().url().optional(),
 });
 
 const clientSchema = z.object({
@@ -25,8 +24,7 @@ const serverKeys = new Set<string>([
   "DATABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "CRON_SECRET",
-  "ADZUNA_APP_ID",
-  "ADZUNA_APP_KEY",
+  "REMOTIVE_API_URL",
 ]);
 
 const isServer = typeof window === "undefined";
