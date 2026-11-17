@@ -236,6 +236,21 @@ function parseRetryAfterValue(val: unknown): number | undefined {
   return undefined;
 }
 
+function extractRetryDelayFromGoogleDetails(details: unknown): number | undefined {
+  if (!Array.isArray(details)) return undefined;
+  for (const item of details) {
+    if (item && typeof item === "object") {
+      const rec = item as Record<string, unknown>;
+      const type = String(rec["@type"] ?? "");
+      if (type.includes("RetryInfo") && rec.retryDelay) {
+        const parsed = parseRetryAfterValue(rec.retryDelay);
+        if (parsed !== undefined) return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
 export function getRetryAfterMs(err: unknown): number | undefined {
   if (!err || typeof err !== "object") return undefined;
 
@@ -291,7 +306,48 @@ export function getRetryAfterMs(err: unknown): number | undefined {
     }
   }
 
-  // 5. Cause check recursively
+  // 5. Google RPC / Gemini API RetryInfo (in details or nested error)
+  const fromDirectDetails =
+    extractRetryDelayFromGoogleDetails(error.details) ??
+    extractRetryDelayFromGoogleDetails(
+      (error.error as Record<string, unknown> | undefined)?.details
+    );
+  if (fromDirectDetails !== undefined) {
+    return fromDirectDetails;
+  }
+
+  // 6. JSON stringified error or error message regex
+  if (typeof error.message === "string") {
+    const raw = error.message.trim();
+    const jsonStart = raw.indexOf("{");
+    const jsonEnd = raw.lastIndexOf("}");
+
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+      try {
+        const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+        const fromParsedDetails =
+          extractRetryDelayFromGoogleDetails(parsed.details) ??
+          extractRetryDelayFromGoogleDetails(parsed.error?.details);
+        if (fromParsedDetails !== undefined) {
+          return fromParsedDetails;
+        }
+      } catch {
+        // ignore parse error and proceed to regex check
+      }
+    }
+
+    const match =
+      error.message.match(/retry in\s+([0-9.]+)\s*s/i) ||
+      error.message.match(/retry after\s+([0-9.]+)\s*s/i);
+    if (match) {
+      const sec = parseFloat(match[1]);
+      if (!isNaN(sec) && sec >= 0) {
+        return Math.ceil(sec * 1000);
+      }
+    }
+  }
+
+  // 7. Cause check recursively
   if (error.cause && error.cause !== err && typeof error.cause === "object") {
     return getRetryAfterMs(error.cause);
   }
@@ -333,6 +389,12 @@ export async function withRetry<T>(
         retryAfterMs !== undefined
           ? Math.max(calculatedDelay, retryAfterMs)
           : calculatedDelay;
+
+      if (waitMs >= 2000) {
+        console.warn(
+          `[withRetry] Rate limited (attempt ${attempt + 1}/${retries}). Waiting ${(waitMs / 1000).toFixed(1)}s before retry...`
+        );
+      }
 
       await sleep(waitMs);
       attempt++;

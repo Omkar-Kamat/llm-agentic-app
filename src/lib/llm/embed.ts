@@ -7,8 +7,14 @@ export const EMBEDDING_DIMENSION = 768;
 export const MODEL_NAME = EMBEDDING_MODEL;
 export const OUTPUT_DIMENSIONALITY = EMBEDDING_DIMENSION;
 
-const BATCH_SIZE = 20;
-const BATCH_DELAY_MS = 1200;
+const DEFAULT_BATCH_SIZE = 20;
+const DEFAULT_BATCH_DELAY_MS = 13500;
+
+export interface EmbedDocumentsOptions {
+  batchSize?: number;
+  batchDelayMs?: number;
+  onBatch?: (batchVectors: number[][], startIndex: number) => Promise<void> | void;
+}
 
 const ai = new GoogleGenAI({
   apiKey: env.GEMINI_API_KEY,
@@ -46,15 +52,25 @@ export async function embedQuery(text: string): Promise<number[]> {
   return l2Normalize(values);
 }
 
-export async function embedDocuments(texts: string[]): Promise<number[][]> {
+export async function embedDocuments(
+  texts: string[],
+  options?: EmbedDocumentsOptions
+): Promise<number[][]> {
   if (texts.length === 0) {
     return [];
   }
 
+  const batchSize =
+    options?.batchSize ??
+    (Number(process.env.EMBEDDING_BATCH_SIZE) || DEFAULT_BATCH_SIZE);
+  const batchDelayMs =
+    options?.batchDelayMs ??
+    (Number(process.env.EMBEDDING_BATCH_DELAY_MS) || DEFAULT_BATCH_DELAY_MS);
+
   const results: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
 
     const response = await withRetry(() =>
       ai.models.embedContent({
@@ -74,15 +90,22 @@ export async function embedDocuments(texts: string[]): Promise<number[][]> {
       );
     }
 
+    const batchVectors: number[][] = [];
     for (const embedding of embeddings) {
       if (!embedding.values) {
         throw new Error("Missing embedding values in response");
       }
-      results.push(l2Normalize(embedding.values));
+      batchVectors.push(l2Normalize(embedding.values));
     }
 
-    if (i + BATCH_SIZE < texts.length) {
-      await sleep(BATCH_DELAY_MS);
+    results.push(...batchVectors);
+
+    if (options?.onBatch) {
+      await options.onBatch(batchVectors, i);
+    }
+
+    if (i + batchSize < texts.length) {
+      await sleep(batchDelayMs);
     }
   }
 
