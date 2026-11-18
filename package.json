@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:push": "drizzle-kit push",
     "validate:data": "tsx scripts/validate-data.ts",
-    "seed": "tsx --env-file=.env.local scripts/seed.ts"
+    "seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "test:plan": "tsx --env-file=.env.local scripts/test-plan.ts"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.84",

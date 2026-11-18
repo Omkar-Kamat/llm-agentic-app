@@ -2,6 +2,7 @@ export interface RetryOptions {
   retries?: number;
   baseMs?: number;
   shouldRetry?: (err: unknown) => boolean;
+  delayMs?: (err: unknown, attempt: number) => number;
 }
 
 const NETWORK_ERROR_CODES = new Set([
@@ -182,6 +183,16 @@ function parseRetryAfterHeader(val: unknown): number | undefined {
     const trimmed = val.trim();
     if (!trimmed) return undefined;
 
+    if (trimmed.endsWith("ms")) {
+      const parsed = parseFloat(trimmed.slice(0, -2));
+      return isNaN(parsed) || parsed < 0 ? undefined : parsed;
+    }
+
+    if (trimmed.endsWith("s")) {
+      const parsed = parseFloat(trimmed.slice(0, -1));
+      return isNaN(parsed) || parsed < 0 ? undefined : parsed * 1000;
+    }
+
     const num = Number(trimmed);
     if (!isNaN(num) && num >= 0) {
       return num * 1000;
@@ -251,12 +262,11 @@ function extractRetryDelayFromGoogleDetails(details: unknown): number | undefine
   return undefined;
 }
 
-export function getRetryAfterMs(err: unknown): number | undefined {
+export function getRetryAfterHeaderMs(err: unknown): number | undefined {
   if (!err || typeof err !== "object") return undefined;
 
   const error = err as Record<string, unknown>;
 
-  // 1. Explicit millisecond headers/properties
   const msHeader =
     getHeader(error.headers, "retry-after-ms") ??
     (error.response && typeof error.response === "object"
@@ -273,7 +283,6 @@ export function getRetryAfterMs(err: unknown): number | undefined {
     }
   }
 
-  // 2. Retry-After headers
   const headerVal =
     getHeader(error.headers, "retry-after") ??
     (error.response && typeof error.response === "object"
@@ -286,14 +295,90 @@ export function getRetryAfterMs(err: unknown): number | undefined {
     if (parsed !== undefined) return parsed;
   }
 
-  // 3. Retry-After property on error
+  if (error.cause && error.cause !== err && typeof error.cause === "object") {
+    return getRetryAfterHeaderMs(error.cause);
+  }
+
+  return undefined;
+}
+
+export function getTryAgainDelayMs(err: unknown): number | undefined {
+  if (!err) return undefined;
+
+  const extractFromText = (text: string): number | undefined => {
+    const match = text.match(/(?:try again in|retry in|retry after)\s+([0-9.]+)\s*(ms|s)?/i);
+    if (match) {
+      const val = parseFloat(match[1]);
+      if (!isNaN(val) && val >= 0) {
+        const unit = match[2]?.toLowerCase();
+        if (unit === "ms") {
+          return val;
+        }
+        return Math.ceil(val * 1000);
+      }
+    }
+    return undefined;
+  };
+
+  if (typeof err === "string") {
+    return extractFromText(err);
+  }
+
+  if (typeof err !== "object") return undefined;
+
+  const error = err as Record<string, unknown>;
+
+  if (typeof error.message === "string") {
+    const parsed = extractFromText(error.message);
+    if (parsed !== undefined) return parsed;
+  }
+
+  if (typeof error.responseBody === "string") {
+    const parsed = extractFromText(error.responseBody);
+    if (parsed !== undefined) return parsed;
+  }
+
+  if (error.data && typeof error.data === "object") {
+    const data = error.data as Record<string, unknown>;
+    if (typeof data.message === "string") {
+      const parsed = extractFromText(data.message);
+      if (parsed !== undefined) return parsed;
+    }
+    if (data.error && typeof data.error === "object") {
+      const inner = data.error as Record<string, unknown>;
+      if (typeof inner.message === "string") {
+        const parsed = extractFromText(inner.message);
+        if (parsed !== undefined) return parsed;
+      }
+    }
+  }
+
+  if (error.cause && error.cause !== err && typeof error.cause === "object") {
+    return getTryAgainDelayMs(error.cause);
+  }
+
+  return undefined;
+}
+
+export function getRetryAfterMs(err: unknown): number | undefined {
+  if (!err || typeof err !== "object") return undefined;
+
+  const error = err as Record<string, unknown>;
+
+  // 1. Headers (retry-after-ms, retry-after)
+  const fromHeaders = getRetryAfterHeaderMs(error);
+  if (fromHeaders !== undefined) {
+    return fromHeaders;
+  }
+
+  // 2. Retry-After property on error
   const valProp = error.retryAfter ?? error["retry-after"] ?? error.retry_after;
   if (valProp !== undefined && valProp !== null) {
     const parsed = parseRetryAfterValue(valProp);
     if (parsed !== undefined) return parsed;
   }
 
-  // 4. Response data property
+  // 3. Response data property
   if (error.response && typeof error.response === "object") {
     const res = error.response as Record<string, unknown>;
     if (res.data && typeof res.data === "object") {
@@ -306,7 +391,7 @@ export function getRetryAfterMs(err: unknown): number | undefined {
     }
   }
 
-  // 5. Google RPC / Gemini API RetryInfo (in details or nested error)
+  // 4. Google RPC / Gemini API RetryInfo (in details or nested error)
   const fromDirectDetails =
     extractRetryDelayFromGoogleDetails(error.details) ??
     extractRetryDelayFromGoogleDetails(
@@ -316,7 +401,12 @@ export function getRetryAfterMs(err: unknown): number | undefined {
     return fromDirectDetails;
   }
 
-  // 6. JSON stringified error or error message regex
+  // 5. Try again in message or JSON details
+  const fromMessage = getTryAgainDelayMs(error);
+  if (fromMessage !== undefined) {
+    return fromMessage;
+  }
+
   if (typeof error.message === "string") {
     const raw = error.message.trim();
     const jsonStart = raw.indexOf("{");
@@ -332,22 +422,12 @@ export function getRetryAfterMs(err: unknown): number | undefined {
           return fromParsedDetails;
         }
       } catch {
-        // ignore parse error and proceed to regex check
-      }
-    }
-
-    const match =
-      error.message.match(/retry in\s+([0-9.]+)\s*s/i) ||
-      error.message.match(/retry after\s+([0-9.]+)\s*s/i);
-    if (match) {
-      const sec = parseFloat(match[1]);
-      if (!isNaN(sec) && sec >= 0) {
-        return Math.ceil(sec * 1000);
+        // ignore parse error and proceed
       }
     }
   }
 
-  // 7. Cause check recursively
+  // 6. Cause check recursively
   if (error.cause && error.cause !== err && typeof error.cause === "object") {
     return getRetryAfterMs(error.cause);
   }
@@ -361,11 +441,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  opts?: {
-    retries?: number;
-    baseMs?: number;
-    shouldRetry?: (err: unknown) => boolean;
-  }
+  opts?: RetryOptions
 ): Promise<T> {
   const retries = opts?.retries ?? 4;
   const baseMs = opts?.baseMs ?? 800;
@@ -380,15 +456,20 @@ export async function withRetry<T>(
         throw err;
       }
 
-      const backoff = baseMs * Math.pow(2, attempt);
-      const jitter = Math.random() * baseMs;
-      const calculatedDelay = backoff + jitter;
+      let waitMs: number;
+      if (opts?.delayMs) {
+        waitMs = opts.delayMs(err, attempt);
+      } else {
+        const backoff = baseMs * Math.pow(2, attempt);
+        const jitter = Math.random() * baseMs;
+        const calculatedDelay = backoff + jitter;
 
-      const retryAfterMs = getRetryAfterMs(err);
-      const waitMs =
-        retryAfterMs !== undefined
-          ? Math.max(calculatedDelay, retryAfterMs)
-          : calculatedDelay;
+        const retryAfterMs = getRetryAfterMs(err);
+        waitMs =
+          retryAfterMs !== undefined
+            ? Math.max(calculatedDelay, retryAfterMs)
+            : calculatedDelay;
+      }
 
       if (waitMs >= 2000) {
         console.warn(

@@ -21,17 +21,43 @@ export async function getRoleRequirements(
 
   const rows = await db
     .select({
-      id: jobPostings.id,
+      role: jobPostings.role,
       skills: jobPostings.skills,
     })
     .from(jobPostings)
     .where(isNotNull(jobPostings.embedding))
     .orderBy(asc(distance))
-    .limit(25);
+    .limit(40);
+
+  const roleCounts = new Map<string, number>();
+  for (const row of rows.slice(0, 10)) {
+    if (row.role) {
+      roleCounts.set(row.role, (roleCounts.get(row.role) ?? 0) + 1);
+    }
+  }
+
+  let dominantRole: string | null = null;
+  let maxRoleCount = 0;
+  for (const [role, count] of roleCounts.entries()) {
+    if (count > maxRoleCount) {
+      maxRoleCount = count;
+      dominantRole = role;
+    }
+  }
+
+  const filtered = dominantRole
+    ? rows.filter((row) => row.role === dominantRole).slice(0, 25)
+    : [];
+
+  const postingsToUse = filtered.length >= 5 ? filtered : rows.slice(0, 25);
+
+  if (postingsToUse.length === 0) {
+    return [];
+  }
 
   const counts = new Map<string, number>();
 
-  for (const row of rows) {
+  for (const row of postingsToUse) {
     if (!row.skills || !Array.isArray(row.skills)) {
       continue;
     }
@@ -51,7 +77,7 @@ export async function getRoleRequirements(
   return Array.from(counts.entries())
     .map(([skill, count]) => ({
       skill,
-      freq: count / 25,
+      freq: count / postingsToUse.length,
     }))
     .sort((a, b) => b.freq - a.freq || a.skill.localeCompare(b.skill))
     .slice(0, 15);

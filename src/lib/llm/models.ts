@@ -1,2 +1,2 @@
-export const PLANNER_MODEL = "llama-3.3-70b-versatile";
-export const FAST_MODEL = "llama-3.1-8b-instant";
+export const PLANNER_MODEL = "openai/gpt-oss-120b";
+export const FAST_MODEL = "openai/gpt-oss-20b";
