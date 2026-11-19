@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { getUserOrNull } from "@/lib/auth";
 
 export async function AppNav() {
+  await connection();
   const user = await getUserOrNull();
 
   if (!user) {

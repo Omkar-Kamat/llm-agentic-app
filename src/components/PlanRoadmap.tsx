@@ -1,7 +1,8 @@
 import React from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Check } from "lucide-react";
 import { type Plan, type CriticReport } from "@/lib/contracts";
 import { type Course } from "@/lib/rag/searchCourses";
+import { type ProgressEvent } from "@/lib/services/progress";
 import {
   Card,
   CardContent,
@@ -9,12 +10,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ModuleControls } from "@/components/ModuleControls";
+import { cn } from "@/lib/utils";
 
 export interface PlanRoadmapProps {
   plan: Plan;
   version: number;
   criticReport: CriticReport;
   courses: Record<string, Course>;
+  events?: ProgressEvent[];
 }
 
 export function PlanRoadmap({
@@ -22,12 +26,19 @@ export function PlanRoadmap({
   version,
   criticReport,
   courses,
+  events = [],
 }: PlanRoadmapProps) {
   const sortedModules = [...(plan.modules || [])].sort(
     (a, b) => a.order - b.order
   );
   const warnings = criticReport?.warnings || [];
   const hasWarnings = Array.isArray(warnings) && warnings.length > 0;
+
+  const sortedEvents = [...(events || [])].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
 
   return (
     <div className="space-y-8">
@@ -83,14 +94,45 @@ export function PlanRoadmap({
           const isHighDemand = module.marketTag === "high_demand";
           const isRising = module.marketTag === "rising";
 
+          const courseEvents = sortedEvents.filter(
+            (e) => e.courseId === module.courseId
+          );
+          const completed = courseEvents.some((e) => e.type === "completed");
+          const latestQuiz = courseEvents.find(
+            (e) => e.type === "quiz" && e.score !== null && e.score !== undefined
+          );
+          const latestScore =
+            latestQuiz && latestQuiz.score !== null && latestQuiz.score !== undefined
+              ? Number(latestQuiz.score)
+              : null;
+          const latestRatingEvent = courseEvents.find(
+            (e) =>
+              e.type === "rating" &&
+              e.rating !== null &&
+              e.rating !== undefined &&
+              e.rating !== ""
+          );
+          const latestRating = latestRatingEvent?.rating ?? null;
+
           return (
             <div key={module.courseId || module.order} className="relative">
               {/* Order number marker on timeline */}
-              <div className="absolute -left-[37px] top-1.5 flex h-7 w-7 items-center justify-center rounded-full border bg-background font-semibold text-xs text-foreground ring-4 ring-background shadow-xs">
+              <div
+                className={cn(
+                  "absolute -left-[37px] top-1.5 flex h-7 w-7 items-center justify-center rounded-full border bg-background font-semibold text-xs text-foreground ring-4 ring-background shadow-xs",
+                  completed &&
+                    "border-muted-foreground/30 text-muted-foreground bg-muted"
+                )}
+              >
                 {module.order}
               </div>
 
-              <Card>
+              <Card
+                className={cn(
+                  "transition-colors",
+                  completed && "opacity-60 bg-muted/40 border-muted"
+                )}
+              >
                 <CardHeader className="space-y-2 pb-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="space-y-1">
@@ -102,7 +144,10 @@ export function PlanRoadmap({
                           href={courseUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="hover:underline text-foreground inline-flex items-center gap-1.5"
+                          className={cn(
+                            "hover:underline text-foreground inline-flex items-center gap-1.5",
+                            completed && "text-muted-foreground"
+                          )}
                         >
                           {courseTitle}
                           <ExternalLink className="size-3.5 shrink-0 opacity-70" />
@@ -111,6 +156,15 @@ export function PlanRoadmap({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {completed && (
+                        <Badge
+                          variant="secondary"
+                          className="gap-1 border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                        >
+                          <Check className="size-3" />
+                          Completed
+                        </Badge>
+                      )}
                       {course?.provider && (
                         <Badge variant="secondary">{course.provider}</Badge>
                       )}
@@ -156,6 +210,15 @@ export function PlanRoadmap({
                       ))}
                     </div>
                   )}
+
+                  <div className="pt-2 border-t">
+                    <ModuleControls
+                      courseId={module.courseId}
+                      completed={completed}
+                      latestScore={latestScore}
+                      latestRating={latestRating}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </div>

@@ -3,9 +3,12 @@ import { getUserOrNull } from "@/lib/auth";
 import { getLearner } from "@/lib/learners";
 import { getLatestPlan } from "@/lib/services/plans";
 import { getCoursesByIds, type Course } from "@/lib/rag/searchCourses";
+import { getProgressEvents } from "@/lib/services/progress";
 import { type CriticReport } from "@/lib/contracts";
 import { GeneratePlan } from "@/components/GeneratePlan";
 import { PlanRoadmap } from "@/components/PlanRoadmap";
+import { ProgressChart } from "@/components/ProgressChart";
+import { MarketShiftButton } from "@/components/MarketShiftButton";
 
 export const instant = false;
 
@@ -42,7 +45,10 @@ export default async function DashboardPage({
   }
 
   const courseIds = latestPlan.plan.modules.map((m) => m.courseId);
-  const courseList = await getCoursesByIds(courseIds);
+  const [courseList, progressEvents] = await Promise.all([
+    getCoursesByIds(courseIds),
+    getProgressEvents(user.id),
+  ]);
   const courses: Record<string, Course> = {};
   for (const course of courseList) {
     courses[course.id] = course;
@@ -56,13 +62,62 @@ export default async function DashboardPage({
     passed: true,
   };
 
+  const completedCourseIds = new Set(
+    progressEvents
+      .filter((e) => e.type === "completed" && e.courseId)
+      .map((e) => e.courseId)
+  );
+  const completedCount = completedCourseIds.size;
+
+  const planModuleList = latestPlan.plan.modules || [];
+  const planCourseIdSet = new Set(planModuleList.map((m) => m.courseId));
+  const completedNotInPlanCount = Array.from(completedCourseIds).filter(
+    (id) => !planCourseIdSet.has(id)
+  ).length;
+  const totalCount = planModuleList.length + completedNotInPlanCount;
+
+  const quizEvents = progressEvents.filter(
+    (e) => e.type === "quiz" && e.score !== null && e.score !== undefined
+  );
+  const sortedQuizEvents = [...quizEvents].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeA - timeB;
+  });
+  const quizScores = sortedQuizEvents.map((e) => ({
+    date: e.createdAt
+      ? new Date(e.createdAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })
+      : "",
+    score: Number(e.score),
+  }));
+
+  const coveredSkills = Array.from(
+    new Set(
+      (latestPlan.plan.modules || [])
+        .flatMap((m) => m.skillsCovered || [])
+        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-8">
+    <div className="container mx-auto max-w-4xl px-4 py-8 space-y-8">
+      <div className="flex justify-end">
+        <MarketShiftButton skills={coveredSkills} />
+      </div>
+      <ProgressChart
+        completedCount={completedCount}
+        totalCount={totalCount}
+        quizScores={quizScores}
+      />
       <PlanRoadmap
         plan={latestPlan.plan}
         version={latestPlan.version}
         criticReport={criticReport}
         courses={courses}
+        events={progressEvents}
       />
     </div>
   );
