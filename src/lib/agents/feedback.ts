@@ -243,6 +243,11 @@ ${marketDescription}`;
         maxRetries: 0,
         abortSignal: signal,
         maxOutputTokens: MAX_OUTPUT_TOKENS.feedback,
+        providerOptions: {
+          groq: {
+            reasoningEffort: "low",
+          },
+        },
       }),
     { primary: PLANNER_MODEL }
   );

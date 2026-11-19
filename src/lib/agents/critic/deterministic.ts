@@ -56,29 +56,29 @@ export function runDeterministicChecks(input: {
   const reportedDuplicates = new Set<string>();
   const seenUnknownCourses = new Set<string>();
 
-  for (const module of plan.modules) {
-    if (!courses.has(module.courseId)) {
-      if (!seenUnknownCourses.has(module.courseId)) {
-        seenUnknownCourses.add(module.courseId);
+  for (const mod of plan.modules) {
+    if (!courses.has(mod.courseId)) {
+      if (!seenUnknownCourses.has(mod.courseId)) {
+        seenUnknownCourses.add(mod.courseId);
         issues.push({
           code: "UNKNOWN_COURSE",
-          courseId: module.courseId,
-          message: `Course '${module.courseId}' is not found in the course catalog. Replace or remove course '${module.courseId}'.`,
+          courseId: mod.courseId,
+          message: `Course '${mod.courseId}' is not found in the course catalog. Replace or remove course '${mod.courseId}'.`,
         });
       }
     }
 
-    if (seenCourseIds.has(module.courseId)) {
-      if (!reportedDuplicates.has(module.courseId)) {
-        reportedDuplicates.add(module.courseId);
+    if (seenCourseIds.has(mod.courseId)) {
+      if (!reportedDuplicates.has(mod.courseId)) {
+        reportedDuplicates.add(mod.courseId);
         issues.push({
           code: "DUPLICATE_COURSE",
-          courseId: module.courseId,
-          message: `Course '${module.courseId}' appears more than once in the plan. Remove duplicate occurrences of course '${module.courseId}'.`,
+          courseId: mod.courseId,
+          message: `Course '${mod.courseId}' appears more than once in the plan. Remove duplicate occurrences of course '${mod.courseId}'.`,
         });
       }
     } else {
-      seenCourseIds.add(module.courseId);
+      seenCourseIds.add(mod.courseId);
     }
   }
 
@@ -123,8 +123,8 @@ export function runDeterministicChecks(input: {
   // GAP_UNCOVERED: any of the 3 highest-importance gaps whose skill is not in any module's skillsCovered nor in a completed course's skills.
   const coveredSkills = new Set<string>();
 
-  for (const module of plan.modules) {
-    for (const skill of module.skillsCovered ?? []) {
+  for (const mod of plan.modules) {
+    for (const skill of mod.skillsCovered ?? []) {
       if (skill) {
         coveredSkills.add(skill.trim().toLowerCase());
       }
@@ -166,8 +166,8 @@ export function runDeterministicChecks(input: {
     { level: Level; courseId: string }
   >();
 
-  for (const module of plan.modules) {
-    const course = courses.get(module.courseId);
+  for (const mod of plan.modules) {
+    const course = courses.get(mod.courseId);
     if (!course) {
       continue;
     }
@@ -175,7 +175,7 @@ export function runDeterministicChecks(input: {
     const currentLevelValue = LEVEL_ORDER[course.level];
 
     const moduleSkills = new Set<string>();
-    for (const skill of module.skillsCovered ?? []) {
+    for (const skill of mod.skillsCovered ?? []) {
       if (skill) {
         moduleSkills.add(skill.trim().toLowerCase());
       }
@@ -193,19 +193,19 @@ export function runDeterministicChecks(input: {
         if (currentLevelValue < prevLevelValue) {
           issues.push({
             code: "LEVEL_REGRESSION",
-            courseId: module.courseId,
-            message: `Course '${module.courseId}' teaches skill '${skill}' at ${course.level} level, which is lower than earlier course '${prev.courseId}' (${prev.level}). Remove '${module.courseId}' or reschedule it before '${prev.courseId}'.`,
+            courseId: mod.courseId,
+            message: `Course '${mod.courseId}' teaches skill '${skill}' at ${course.level} level, which is lower than earlier course '${prev.courseId}' (${prev.level}). Remove '${mod.courseId}' or reschedule it before '${prev.courseId}'.`,
           });
         } else if (currentLevelValue > prevLevelValue) {
           maxLevelBySkill.set(skill, {
             level: course.level,
-            courseId: module.courseId,
+            courseId: mod.courseId,
           });
         }
       } else {
         maxLevelBySkill.set(skill, {
           level: course.level,
-          courseId: module.courseId,
+          courseId: mod.courseId,
         });
       }
     }

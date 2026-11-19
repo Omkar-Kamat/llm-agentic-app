@@ -4,8 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
-export interface DismissReplanButtonProps
-  extends React.ComponentProps<typeof Button> {}
+export type DismissReplanButtonProps = React.ComponentProps<typeof Button>;
 
 export function DismissReplanButton({
   children = "Dismiss",
@@ -15,12 +14,7 @@ export function DismissReplanButton({
   onClick,
   ...props
 }: DismissReplanButtonProps) {
-  let router: ReturnType<typeof useRouter> | null = null;
-  try {
-    router = useRouter();
-  } catch {
-    router = null;
-  }
+  const router = useRouter();
 
   const [loading, setLoading] = React.useState(false);
 

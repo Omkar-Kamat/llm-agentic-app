@@ -1,8 +1,8 @@
 export const MAX_OUTPUT_TOKENS = {
-  profiler: 700,
-  planner: 1500,
-  judge: 600,
-  feedback: 500,
+  profiler: 2500,
+  planner: 2000,
+  judge: 2000,
+  feedback: 1500,
 } as const;
 
 export const MAX_CANDIDATES = 30;

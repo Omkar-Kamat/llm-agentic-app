@@ -7,10 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "db:push": "drizzle-kit push",
     "validate:data": "tsx scripts/validate-data.ts",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
-    "test:plan": "tsx --env-file=.env.local scripts/test-plan.ts"
+    "test:plan": "tsx --env-file=.env.local scripts/test-plan.ts",
+    "test:auth": "tsx scripts/test-auth-guard.ts",
+    "persona": "tsx --env-file=.env.local scripts/run-persona.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.84",
@@ -47,6 +51,7 @@
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

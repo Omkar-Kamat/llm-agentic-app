@@ -126,7 +126,19 @@ export async function generatePlanDraft(input: {
     }
   }
 
-  const candidateLines = Array.from(finalCandidates.values()).map((c) => {
+  const LEVEL_ORDER: Record<Level, number> = {
+    beginner: 1,
+    intermediate: 2,
+    advanced: 3,
+  };
+
+  const sortedFinalCandidates = Array.from(finalCandidates.values()).sort((a, b) => {
+    const diff = (LEVEL_ORDER[a.level] ?? 1) - (LEVEL_ORDER[b.level] ?? 1);
+    if (diff !== 0) return diff;
+    return b.score - a.score;
+  });
+
+  const candidateLines = sortedFinalCandidates.map((c) => {
     const prereqs =
       c.prerequisites && c.prerequisites.length > 0
         ? c.prerequisites.join(", ")
@@ -153,19 +165,20 @@ ${candidateLines.join("\n")}
 
   stage2Prompt += `\nRules:
 - use ONLY candidate ids
-- prerequisites first and levels increasing
+- You MUST cover all top skill gaps (especially the top 3-5 gaps with highest importance). Ensure every high-importance skill gap is covered by at least one course's skillsCovered.
+- Include intermediate candidate courses needed to reach the target role, scheduling all beginner courses strictly before any intermediate courses, and all intermediate before advanced. NEVER schedule a beginner course after an intermediate course.
+- Prerequisites must always appear earlier in the plan than the course that requires them.
 - skip completedCourseIds
-- pick only courses that cover the gaps
 - rationale ties each course to this learner's goal in under 240 chars
 - each rationale must mention the learner's current role or one of their existing skills and say how this course builds on it
-- do not include two courses that cover the same skills at the same level; pick the better one
+- do not include two courses that cover the same primary skill at the same level; pick the better one
 - the summary must not mention weeks, hours or durations, and every marketTag must be null
 `;
 
   if (input.feedback && input.feedback.length > 0) {
-    stage2Prompt += `\nFix these problems from the previous attempt:\n${input.feedback
+    stage2Prompt += `\nCRITICAL FIXES REQUIRED from previous attempt:\n${input.feedback
       .map((f) => `- ${f}`)
-      .join("\n")}\n`;
+      .join("\n")}\nFollow these fixes strictly.\n`;
   }
 
   const { object: draft } = await runWithFallback((model, signal) =>
@@ -185,22 +198,22 @@ ${candidateLines.join("\n")}
     })
   );
 
-  for (const module of draft.modules) {
+  for (const mod of draft.modules) {
     const coveredSkills = new Set(
-      module.skillsCovered.map((s) => s.trim().toLowerCase())
+      mod.skillsCovered.map((s) => s.trim().toLowerCase())
     );
     const matchingGaps = input.gaps.filter(
       (gap) =>
         coveredSkills.has(gap.skill.trim().toLowerCase()) ||
-        module.skillsCovered.includes(gap.skill)
+        mod.skillsCovered.includes(gap.skill)
     );
 
     if (matchingGaps.some((gap) => gap.demandScore >= 70)) {
-      module.marketTag = "high_demand";
+      mod.marketTag = "high_demand";
     } else if (matchingGaps.some((gap) => gap.delta >= 5)) {
-      module.marketTag = "rising";
+      mod.marketTag = "rising";
     } else {
-      module.marketTag = null;
+      mod.marketTag = null;
     }
   }
 

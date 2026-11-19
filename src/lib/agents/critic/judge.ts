@@ -132,6 +132,11 @@ Evaluation Rules:
         maxRetries: 0,
         abortSignal: signal,
         maxOutputTokens: MAX_OUTPUT_TOKENS.judge,
+        providerOptions: {
+          groq: {
+            reasoningEffort: "low",
+          },
+        },
       }),
     { primary: PLANNER_MODEL }
   );

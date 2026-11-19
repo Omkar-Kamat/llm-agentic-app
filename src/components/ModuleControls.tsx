@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -54,15 +54,19 @@ export function ModuleControls({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
 
-  useEffect(() => {
+  const [prevLatestScore, setPrevLatestScore] = useState(latestScore);
+  if (latestScore !== prevLatestScore) {
+    setPrevLatestScore(latestScore);
     setScore(
       latestScore !== null && latestScore !== undefined ? latestScore : ""
     );
-  }, [latestScore]);
+  }
 
-  useEffect(() => {
+  const [prevLatestRating, setPrevLatestRating] = useState(latestRating);
+  if (latestRating !== prevLatestRating) {
+    setPrevLatestRating(latestRating);
     setRating(normalizeRating(latestRating));
-  }, [latestRating]);
+  }
 
   const isDisabled = completed || isSubmitting;
 

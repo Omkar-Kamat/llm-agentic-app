@@ -46,6 +46,11 @@ ${vocabList}
         maxRetries: 0,
         abortSignal: signal,
         maxOutputTokens: MAX_OUTPUT_TOKENS.profiler,
+        providerOptions: {
+          groq: {
+            reasoningEffort: "low",
+          },
+        },
       }),
     { primary: FAST_MODEL }
   );
