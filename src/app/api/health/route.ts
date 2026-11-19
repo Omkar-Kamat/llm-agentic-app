@@ -8,7 +8,9 @@ export async function GET() {
     await db.execute(sql`SELECT 1`);
   } catch (err: unknown) {
     dbStatus = "error";
-    dbError = err instanceof Error ? err.message : String(err);
+    const cause = (err as { cause?: unknown })?.cause;
+    const causeMsg = cause instanceof Error ? cause.message : typeof cause === "object" && cause !== null ? JSON.stringify(cause) : String(cause);
+    dbError = `${err instanceof Error ? err.message : String(err)} | cause: ${causeMsg}`;
   }
 
   return Response.json(
