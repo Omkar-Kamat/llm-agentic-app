@@ -9,6 +9,8 @@ import { GeneratePlan } from "@/components/GeneratePlan";
 import { PlanRoadmap } from "@/components/PlanRoadmap";
 import { ProgressChart } from "@/components/ProgressChart";
 import { MarketShiftButton } from "@/components/MarketShiftButton";
+import { RefreshButton } from "@/components/RefreshButton";
+import { ReplanBanner } from "@/components/ReplanBanner";
 
 export const instant = false;
 
@@ -38,7 +40,8 @@ export default async function DashboardPage({
 
   if (!latestPlan || isGenerateRequested) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 space-y-8">
+        <ReplanBanner learnerId={user.id} />
         <GeneratePlan />
       </div>
     );
@@ -104,7 +107,9 @@ export default async function DashboardPage({
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8 space-y-8">
-      <div className="flex justify-end">
+      <ReplanBanner learnerId={user.id} />
+      <div className="flex items-center justify-end gap-2">
+        <RefreshButton />
         <MarketShiftButton skills={coveredSkills} />
       </div>
       <ProgressChart
