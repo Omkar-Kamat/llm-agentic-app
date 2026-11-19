@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { CriticVerdict, Plan, Profile, SkillGap } from "@/lib/contracts";
-import { groq } from "@/lib/llm/groq";
+import { runWithFallback } from "@/lib/llm/call";
+import { MAX_OUTPUT_TOKENS } from "@/lib/llm/limits";
 import { PLANNER_MODEL } from "@/lib/llm/models";
 
 export interface JudgePlanInput {
@@ -120,13 +121,20 @@ Evaluation Rules:
 - issues: List concrete problems, deficiencies, or risks identified in the plan (at most 3 issues; empty array if none).
 - suggestions: List actionable, practical recommendations to improve the plan (at most 3 suggestions; empty array if none).`;
 
-  const { object } = await generateObject({
-    model: groq(PLANNER_MODEL),
-    schema: CriticVerdict,
-    temperature: 0,
-    system,
-    prompt,
-  });
+  const { object } = await runWithFallback(
+    (model, signal) =>
+      generateObject({
+        model,
+        schema: CriticVerdict,
+        temperature: 0,
+        system,
+        prompt,
+        maxRetries: 0,
+        abortSignal: signal,
+        maxOutputTokens: MAX_OUTPUT_TOKENS.judge,
+      }),
+    { primary: PLANNER_MODEL }
+  );
 
   const verdict = object;
   verdict.issues = verdict.issues.slice(0, 3);

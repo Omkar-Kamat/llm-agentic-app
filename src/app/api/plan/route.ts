@@ -1,8 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth";
 import { getLearner } from "@/lib/learners";
 import { Profile } from "@/lib/contracts";
+import { handleRoute, jsonError } from "@/lib/http";
 import { createPlan, type StatusStage } from "@/lib/agents/orchestrate";
 import { savePlan } from "@/lib/services/plans";
 import { db } from "@/lib/db/client";
@@ -55,65 +55,21 @@ function sanitizeErrorMessage(err: unknown): string {
   return message.trim() || "Failed to generate plan";
 }
 
-export async function POST(_req: NextRequest) {
-  let user;
-  try {
-    user = await requireUser();
-  } catch (err: unknown) {
-    if (
-      err &&
-      typeof err === "object" &&
-      "status" in err &&
-      (err as { status: number }).status === 401
-    ) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "UNAUTHORIZED",
-            message: "Sign in required",
-          },
-        },
-        { status: 401 }
-      );
+export async function POST() {
+  return handleRoute(async () => {
+    const user = await requireUser();
+
+    const learner = await getLearner(user.id);
+    if (!learner || !learner.profileJson) {
+      return jsonError(400, "PROFILE_MISSING", "Complete onboarding first");
     }
-    return NextResponse.json(
-      {
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Sign in required",
-        },
-      },
-      { status: 401 }
-    );
-  }
 
-  const learner = await getLearner(user.id);
-  if (!learner || !learner.profileJson) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "PROFILE_MISSING",
-          message: "Complete onboarding first",
-        },
-      },
-      { status: 400 }
-    );
-  }
+    const parsedProfile = Profile.safeParse(learner.profileJson);
+    if (!parsedProfile.success) {
+      return jsonError(400, "PROFILE_MISSING", "Complete onboarding first");
+    }
 
-  const parsedProfile = Profile.safeParse(learner.profileJson);
-  if (!parsedProfile.success) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "PROFILE_MISSING",
-          message: "Complete onboarding first",
-        },
-      },
-      { status: 400 }
-    );
-  }
-
-  const profile = parsedProfile.data;
+    const profile = parsedProfile.data;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -176,12 +132,13 @@ export async function POST(_req: NextRequest) {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
   });
 }

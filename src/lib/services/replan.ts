@@ -21,6 +21,9 @@ import {
 } from "@/lib/agents/feedback";
 import { createPlan, type StatusStage } from "@/lib/agents/orchestrate";
 import { diffPlans } from "@/lib/services/diff";
+import { RateLimitError } from "@/lib/errors";
+
+export { RateLimitError } from "@/lib/errors";
 
 export class ProfileMissingError extends Error {
   code = "PROFILE_MISSING";
@@ -74,6 +77,13 @@ export async function replanLearner(
   }
 
   const planCreatedAt = new Date(latestPlanRecord.createdAt);
+
+  if (
+    (input.trigger === "manual" || input.trigger === "progress") &&
+    Date.now() - planCreatedAt.getTime() < 30_000
+  ) {
+    throw new RateLimitError();
+  }
 
   const allProgressEvents = await getProgressEvents(input.learnerId);
   const eventsSincePlan: ProgressEventSummary[] = allProgressEvents

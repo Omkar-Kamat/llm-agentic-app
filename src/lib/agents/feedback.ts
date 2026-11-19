@@ -6,6 +6,11 @@ import {
   ReplanTrigger,
 } from "@/lib/contracts";
 import { runWithFallback } from "@/lib/llm/call";
+import {
+  capList,
+  MAX_EVENTS_IN_PROMPT,
+  MAX_OUTPUT_TOKENS,
+} from "@/lib/llm/limits";
 import { PLANNER_MODEL } from "@/lib/llm/models";
 
 export interface ProgressEventSummary {
@@ -164,9 +169,16 @@ export async function decideReplan(
     })
     .join("\n\n");
 
+  const promptEvents = capList(
+    [...input.eventsSincePlan].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ),
+    MAX_EVENTS_IN_PROMPT
+  );
+
   const eventsDescription =
-    input.eventsSincePlan.length > 0
-      ? input.eventsSincePlan
+    promptEvents.length > 0
+      ? promptEvents
           .map((e) => {
             const title = courseTitles.get(e.courseId) ?? e.courseId;
             const extra: string[] = [];
@@ -230,6 +242,7 @@ ${marketDescription}`;
         prompt,
         maxRetries: 0,
         abortSignal: signal,
+        maxOutputTokens: MAX_OUTPUT_TOKENS.feedback,
       }),
     { primary: PLANNER_MODEL }
   );
