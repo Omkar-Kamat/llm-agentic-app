@@ -109,6 +109,10 @@ export async function handleRoute(
     }
 
     console.error(err);
-    return jsonError(500, "INTERNAL", "Something went wrong");
+    return jsonError(
+      500,
+      "INTERNAL",
+      err instanceof Error ? err.message : "Something went wrong"
+    );
   }
 }
