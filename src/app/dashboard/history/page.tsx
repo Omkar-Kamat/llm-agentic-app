@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { getUserOrNull } from "@/lib/auth";
 import { getLearner } from "@/lib/learners";
 import { getReplanHistory } from "@/lib/services/history";
@@ -7,9 +8,8 @@ import { PlanDiffView } from "@/components/PlanDiffView";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export const instant = false;
-
 export default async function HistoryPage() {
+  await connection();
   const user = await getUserOrNull();
   if (!user) {
     redirect("/login");

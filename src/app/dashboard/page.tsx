@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { getUserOrNull } from "@/lib/auth";
 import { getLearner } from "@/lib/learners";
 import { getLatestPlan } from "@/lib/services/plans";
@@ -12,8 +13,6 @@ import { MarketShiftButton } from "@/components/MarketShiftButton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ReplanBanner } from "@/components/ReplanBanner";
 
-export const instant = false;
-
 interface DashboardPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
@@ -21,6 +20,7 @@ interface DashboardPageProps {
 export default async function DashboardPage({
   searchParams,
 }: DashboardPageProps) {
+  await connection();
   const user = await getUserOrNull();
   if (!user) {
     redirect("/login");

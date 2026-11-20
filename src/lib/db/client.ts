@@ -35,7 +35,7 @@ const isLocal =
 export const client = postgres(connectionString, {
   prepare: false,
   ssl: isLocal ? false : "require",
-  max: 1,
+  max: 10,
   idle_timeout: 20,
   connect_timeout: 15,
 });
